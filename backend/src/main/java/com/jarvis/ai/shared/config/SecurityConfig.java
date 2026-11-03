@@ -14,6 +14,9 @@ import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -33,7 +36,21 @@ public class SecurityConfig {
     @Bean PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(12); }
     @Bean JwtDecoder jwtDecoder(SecretKey jwtSecretKey) {
         var decoder = NimbusJwtDecoder.withSecretKey(jwtSecretKey).macAlgorithm(MacAlgorithm.HS256).build();
-        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer("jarvis"));
+        OAuth2TokenValidator<Jwt> requiredClaims = jwt -> {
+            boolean validSubject;
+            try { java.util.UUID.fromString(jwt.getSubject()); validSubject = true; }
+            catch (RuntimeException ex) { validSubject = false; }
+            Object roles = jwt.getClaims().get("roles");
+            boolean validRoles = roles instanceof java.util.Collection<?> values && !values.isEmpty()
+                    && values.stream().allMatch(value -> value instanceof String role && !role.isBlank());
+            boolean validProfile = jwt.getClaimAsString("email") != null && !jwt.getClaimAsString("email").isBlank()
+                    && jwt.getClaimAsString("name") != null && !jwt.getClaimAsString("name").isBlank();
+            return validSubject && validRoles && validProfile
+                    ? org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.success()
+                    : org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.failure(
+                            new OAuth2Error("invalid_token", "Required JWT claims are missing or invalid", null));
+        };
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer("jarvis"), requiredClaims));
         return decoder;
     }
 
