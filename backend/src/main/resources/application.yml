@@ -31,3 +31,13 @@ info:
     name: Jarvis Personal AI Agent
     description: Assistente pessoal inteligente por voz
     version: 0.1.0
+
+jarvis:
+  jwt:
+    secret: ${JARVIS_JWT_SECRET}
+  admin:
+    email: ${JARVIS_ADMIN_EMAIL:}
+    password: ${JARVIS_ADMIN_PASSWORD:}
+  frontend-origin: ${JARVIS_FRONTEND_ORIGIN:http://localhost:4200}
+  auth:
+    secure-cookie: ${JARVIS_SECURE_COOKIE:false}

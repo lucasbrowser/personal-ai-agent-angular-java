@@ -1,0 +1,19 @@
+:host { display:block; min-height:100vh; color:#edf3ff; }
+.login-shell { min-height:100vh; display:grid; place-items:center; padding:32px 20px; position:relative; overflow:hidden; background:radial-gradient(ellipse at 50% 42%,#142544 0,#0a1222 44%,#070b13 100%); }
+.login-shell::before { content:""; position:absolute; width:520px;height:520px;border:1px solid #8ecbff16;border-radius:50%;box-shadow:0 0 0 60px #8ecbff08,0 0 0 120px #8ecbff05; }
+.login-card { z-index:1; width:min(100%,430px); padding:42px; border:1px solid #d7e8ff1b; border-radius:22px; background:#101a2bd9; box-shadow:0 24px 90px #0008; backdrop-filter:blur(18px); }
+.brand-mark { width:52px;height:52px;margin:0 auto 22px;border:1px solid #7fc7ff6b;border-radius:17px;display:grid;place-items:center;box-shadow:0 0 30px #45b8ff28; }
+.brand-mark span { width:17px;height:17px;border:2px solid #91d7ff;border-radius:50%;box-shadow:0 0 18px #76caff; }
+.eyebrow { text-align:center;color:#86cfff;letter-spacing:.22em;font-size:10px;font-weight:700; }
+h1 { text-align:center;font-size:27px;letter-spacing:-.04em;margin:10px 0 8px; }
+.subtitle { text-align:center;color:#9caec8;font-size:14px;margin:0 0 30px; }
+form { display:grid;gap:10px; } label { color:#dce7f8;font-size:13px;margin-top:8px; }
+input { width:100%;box-sizing:border-box;border:1px solid #6c809933;border-radius:10px;padding:13px 14px;background:#0a1220;color:#f4f8ff;font:inherit;outline:none;transition:border .2s,box-shadow .2s; }
+input:focus { border-color:#64c5ffb0;box-shadow:0 0 0 3px #64c5ff19; } input::placeholder { color:#66758d; }
+small,.error { color:#ff9b9b;font-size:12px;margin:0; }.error { padding:10px;border-radius:8px;background:#fa575716; }
+button { margin-top:13px;border:0;border-radius:10px;padding:14px 16px;color:#07111d;background:linear-gradient(110deg,#99dcff,#55b7f0);font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px; }
+button:disabled { opacity:.55;cursor:wait; }.spinner { width:14px;height:14px;border:2px solid #07111d44;border-top-color:#07111d;border-radius:50%;animation:spin .7s linear infinite; }
+.secure-note { color:#8091a9;text-align:center;font-size:12px;margin:23px 0 0; }.secure-note span { color:#78c9ff;margin-right:5px; }
+footer { position:absolute;bottom:22px;color:#61718a;font-size:11px;letter-spacing:.08em; } footer span { color:#7bcfff;padding:0 5px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+@media(max-width:480px) { .login-card { padding:32px 24px; } h1 {font-size:24px;} }

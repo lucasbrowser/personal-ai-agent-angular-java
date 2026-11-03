@@ -1,0 +1,21 @@
+<main class="login-shell">
+  <section class="login-card" aria-labelledby="login-title">
+    <div class="brand-mark" aria-hidden="true"><span></span></div>
+    <p class="eyebrow">PERSONAL AI SYSTEM</p>
+    <h1 id="login-title">Bem-vindo de volta</h1>
+    <p class="subtitle">Entre para continuar sua conversa com o Jarvis.</p>
+    <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <label for="email">E-mail</label>
+      <input id="email" type="email" formControlName="email" autocomplete="username" placeholder="voce@exemplo.com" />
+      @if (form.controls.email.touched && form.controls.email.invalid) { <small>Informe um e-mail válido.</small> }
+      <label for="password">Senha</label>
+      <input id="password" type="password" formControlName="password" autocomplete="current-password" placeholder="Sua senha" />
+      @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+      <button type="submit" [disabled]="loading() || form.invalid">
+        @if (loading()) { <span class="spinner" aria-hidden="true"></span> Entrando… } @else { Acessar o Jarvis <span aria-hidden="true">↗</span> }
+      </button>
+    </form>
+    <p class="secure-note"><span aria-hidden="true">◈</span> Sessão privada e protegida</p>
+  </section>
+  <footer>JARVIS <span>·</span> Assistente pessoal inteligente</footer>
+</main>
