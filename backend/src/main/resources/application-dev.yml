@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+  flyway:
+    validate-on-migrate: true
+
+logging:
+  level:
+    com.jarvis.ai: DEBUG
+    org.flywaydb: INFO
