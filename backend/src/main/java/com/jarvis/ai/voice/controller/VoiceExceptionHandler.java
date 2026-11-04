@@ -20,7 +20,7 @@ public class VoiceExceptionHandler {
 
     @ExceptionHandler(OpenAIRealtimeException.class)
     ResponseEntity<?> providerFailure(OpenAIRealtimeException exception) {
-        return switch (exception.kind()) {
+        ResponseEntity<?> response = switch (exception.kind()) {
             case AUTHENTICATION -> ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                     .body(error("VOICE_PROVIDER_AUTHENTICATION", "Não foi possível autenticar o serviço de voz."));
             case RATE_LIMITED -> ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
@@ -33,6 +33,12 @@ public class VoiceExceptionHandler {
             case UNAVAILABLE -> ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(error("VOICE_PROVIDER_UNAVAILABLE", "O serviço de voz está indisponível."));
         };
+        return ResponseEntity.status(response.getStatusCode())
+                .headers(headers -> {
+                    headers.addAll(response.getHeaders());
+                    if (exception.requestId() != null) headers.set("X-Request-Id", exception.requestId());
+                })
+                .body(response.getBody());
     }
 
     private Map<String, Object> error(String code, String message) {

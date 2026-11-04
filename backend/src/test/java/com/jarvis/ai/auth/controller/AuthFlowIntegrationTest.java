@@ -204,7 +204,7 @@ class AuthFlowIntegrationTest {
     @Test
     void voiceSessionRequiresAuthenticationAndUsesAuthenticatedSubjectWithoutCachingSecret() throws Exception {
         UUID authenticatedUser = users.findByEmail(ADMIN_EMAIL).orElseThrow().id();
-        given(realtimeClient.createClientSecret(anyString())).willReturn(
+        given(realtimeClient.createClientSecret(anyString(), anyString())).willReturn(
                 new RealtimeClientSecret("ek_ephemeral-only", 1_800_000_000L, "sess_voice", "gpt-realtime-2.1-mini"));
 
         var unauthorized = send("/api/v1/voice/sessions", "POST", Map.of(), new HttpHeaders());
@@ -216,17 +216,21 @@ class AuthFlowIntegrationTest {
         var response = send("/api/v1/voice/sessions", "POST", Map.of("userId", forgedUser), headers);
 
         assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.headers().firstValue("X-Request-Id").orElse("")).matches(
+                "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
         assertThat(response.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
         assertThat(response.body()).contains("ek_ephemeral-only", "sess_voice", "gpt-realtime-2.1-mini")
                 .doesNotContain("test-openai-api-key-not-real");
         String expectedSafetyId = "sha256:" + sha256("jarvis-realtime-user:" + authenticatedUser);
-        verify(realtimeClient).createClientSecret(expectedSafetyId);
+        String requestId = response.headers().firstValue("X-Request-Id").orElseThrow();
+        verify(realtimeClient).createClientSecret(org.mockito.ArgumentMatchers.eq(expectedSafetyId),
+                org.mockito.ArgumentMatchers.eq(requestId));
     }
 
     @Test
     void voiceSessionCreationIsRateLimitedPerAuthenticatedUser() throws Exception {
         UUID userId = UUID.randomUUID();
-        given(realtimeClient.createClientSecret(anyString())).willReturn(
+        given(realtimeClient.createClientSecret(anyString(), anyString())).willReturn(
                 new RealtimeClientSecret("ek_ephemeral-only", 1_800_000_000L, "sess_voice", "gpt-realtime-2.1-mini"));
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(jwtForSubject(userId));

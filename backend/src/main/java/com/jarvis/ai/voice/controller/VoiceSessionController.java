@@ -22,9 +22,11 @@ public class VoiceSessionController {
     @PostMapping("/sessions")
     public ResponseEntity<RealtimeClientSecret> create(@AuthenticationPrincipal Jwt principal) {
         UUID userId = UUID.fromString(principal.getSubject());
+        String requestId = UUID.randomUUID().toString();
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .header(HttpHeaders.PRAGMA, "no-cache")
-                .body(sessions.create(userId));
+                .header("X-Request-Id", requestId)
+                .body(sessions.create(userId, requestId));
     }
 }

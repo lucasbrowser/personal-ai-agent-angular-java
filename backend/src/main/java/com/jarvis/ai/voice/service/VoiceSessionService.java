@@ -18,9 +18,9 @@ public class VoiceSessionService {
         this.rateLimiter = rateLimiter;
     }
 
-    public RealtimeClientSecret create(UUID authenticatedUserId) {
+    public RealtimeClientSecret create(UUID authenticatedUserId, String requestId) {
         if (!rateLimiter.allow(authenticatedUserId)) throw new VoiceRateLimitException();
-        return client.createClientSecret(safetyIdentifier(authenticatedUserId));
+        return client.createClientSecret(safetyIdentifier(authenticatedUserId), requestId);
     }
 
     static String safetyIdentifier(UUID userId) {
