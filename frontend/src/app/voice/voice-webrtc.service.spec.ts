@@ -34,7 +34,7 @@ describe('VoiceWebRTCService', () => {
       createAudioElement: vi.fn().mockReturnValue(audio), requestAnswer: vi.fn().mockResolvedValue('answer-sdp'),
     } as unknown as VoiceBrowserAdapter;
     sessions = {
-      createSession: vi.fn().mockResolvedValue({ clientSecret: 'ek-ephemeral', expiresAt: 9_999_999_999, sessionId: 'sess-1', model: 'model' }),
+      createSession: vi.fn().mockResolvedValue({ clientSecret: 'ek_ephemeral', expiresAt: 9_999_999_999, sessionId: 'sess-1', model: 'model' }),
     } as unknown as VoiceSessionService;
     TestBed.configureTestingModule({ providers: [VoiceWebRTCService, VoiceEventsService, { provide: VoiceBrowserAdapter, useValue: adapter }, { provide: VoiceSessionService, useValue: sessions }] });
     service = TestBed.inject(VoiceWebRTCService);
@@ -53,7 +53,7 @@ describe('VoiceWebRTCService', () => {
     expect(adapter.getMicrophone.mock.invocationCallOrder[0]).toBeLessThan(sessions.createSession.mock.invocationCallOrder[0]);
     expect(microphoneGranted).toHaveBeenCalled();
     expect(peer.addTrack).toHaveBeenCalledWith(track, stream);
-    expect(adapter.requestAnswer).toHaveBeenCalledWith('offer-sdp', 'ek-ephemeral');
+    expect(adapter.requestAnswer).toHaveBeenCalledWith('offer-sdp', 'ek_ephemeral');
     expect(peer.setRemoteDescription).toHaveBeenCalledWith({ type: 'answer', sdp: 'answer-sdp' });
     expect(document.body.contains(audio)).toBe(true);
     channel.onopen?.(new Event('open'));

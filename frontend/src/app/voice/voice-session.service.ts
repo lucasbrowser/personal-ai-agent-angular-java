@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { VoiceSession } from './voice.models';
 
 interface VoiceSessionResponse {
-  clientSecret: string;
+  value: string;
   expiresAt: number;
   sessionId: string;
   model: string;
@@ -15,13 +15,21 @@ export class VoiceSessionService {
   private readonly http = inject(HttpClient);
 
   async createSession(): Promise<VoiceSession> {
-    const session = await firstValueFrom(this.http.post<VoiceSessionResponse>('/api/v1/voice/sessions', {}));
-    if (!session.clientSecret || !session.sessionId || !session.model || !Number.isFinite(session.expiresAt)) {
+    const session = await firstValueFrom(this.http.post<VoiceSessionResponse | null>('/api/v1/voice/sessions', {}));
+    if (!session || typeof session.value !== 'string' || !session.value.startsWith('ek_') || session.value.length <= 3
+      || typeof session.sessionId !== 'string' || !session.sessionId.trim()
+      || typeof session.model !== 'string' || !session.model.trim() || typeof session.expiresAt !== 'number'
+      || !Number.isFinite(session.expiresAt)) {
       throw new Error('O servidor retornou uma credencial de voz inválida.');
     }
     if (session.expiresAt <= Math.floor(Date.now() / 1000)) {
       throw new Error('A credencial de voz expirou. Tente novamente.');
     }
-    return session;
+    return {
+      clientSecret: session.value,
+      expiresAt: session.expiresAt,
+      sessionId: session.sessionId,
+      model: session.model,
+    };
   }
 }

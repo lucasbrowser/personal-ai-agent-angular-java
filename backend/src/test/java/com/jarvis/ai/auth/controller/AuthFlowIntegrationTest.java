@@ -219,8 +219,8 @@ class AuthFlowIntegrationTest {
         assertThat(response.headers().firstValue("X-Request-Id").orElse("")).matches(
                 "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
         assertThat(response.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
-        assertThat(response.body()).contains("ek_ephemeral-only", "sess_voice", "gpt-realtime-2.1-mini")
-                .doesNotContain("test-openai-api-key-not-real");
+        assertThat(response.body()).contains("\"value\":\"ek_ephemeral-only\"", "sess_voice", "gpt-realtime-2.1-mini")
+                .doesNotContain("\"clientSecret\"", "test-openai-api-key-not-real");
         String expectedSafetyId = sha256("jarvis-realtime-user:" + authenticatedUser);
         String requestId = response.headers().firstValue("X-Request-Id").orElseThrow();
         verify(realtimeClient).createClientSecret(org.mockito.ArgumentMatchers.eq(expectedSafetyId),
