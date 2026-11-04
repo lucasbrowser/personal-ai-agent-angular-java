@@ -28,6 +28,7 @@ import org.springframework.web.client.RestClient;
 
 class OpenAIRealtimeClientTest {
     private static final String ENDPOINT = "https://api.openai.com/v1/realtime/client_secrets";
+    private static final String SAFETY_IDENTIFIER = "a".repeat(64);
     private static final String RESPONSE = """
             {"value":"ek_temporary","expires_at":1800000000,"session":{"id":"sess_test","model":"gpt-realtime-2.1-mini"}}
             """;
@@ -38,7 +39,7 @@ class OpenAIRealtimeClientTest {
         fixture.server.expect(requestTo(ENDPOINT))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("Authorization", "Bearer configured-test-key"))
-                .andExpect(header("OpenAI-Safety-Identifier", "sha256:stable-user-hash"))
+                .andExpect(header("OpenAI-Safety-Identifier", SAFETY_IDENTIFIER))
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(content().string(org.hamcrest.Matchers.allOf(
                         org.hamcrest.Matchers.containsString("\"seconds\":600"),
@@ -51,7 +52,7 @@ class OpenAIRealtimeClientTest {
                         org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("configured-test-key")))))
                 .andRespond(withSuccess(RESPONSE, MediaType.APPLICATION_JSON));
 
-        RealtimeClientSecret result = fixture.client.createClientSecret("sha256:stable-user-hash", "request-123");
+        RealtimeClientSecret result = fixture.client.createClientSecret(SAFETY_IDENTIFIER, "request-123");
 
         assertThat(result).isEqualTo(new RealtimeClientSecret("ek_temporary", 1_800_000_000L,
                 "sess_test", "gpt-realtime-2.1-mini"));
@@ -75,7 +76,7 @@ class OpenAIRealtimeClientTest {
         timeout.server.expect(requestTo(ENDPOINT)).andRespond(request -> {
             throw new ResourceAccessException("timeout", new SocketTimeoutException("timeout"));
         });
-        assertThatThrownBy(() -> timeout.client.createClientSecret("safe-id", "request-timeout"))
+        assertThatThrownBy(() -> timeout.client.createClientSecret(SAFETY_IDENTIFIER, "request-timeout"))
                 .isInstanceOfSatisfying(OpenAIRealtimeException.class,
                         exception -> {
                             assertThat(exception.kind()).isEqualTo(OpenAIRealtimeException.Kind.TIMEOUT);
@@ -88,7 +89,7 @@ class OpenAIRealtimeClientTest {
         connection.server.expect(requestTo(ENDPOINT)).andRespond(request -> {
             throw new ResourceAccessException("connection refused", new ConnectException("connection refused"));
         });
-        assertThatThrownBy(() -> connection.client.createClientSecret("safe-id", "request-connection"))
+        assertThatThrownBy(() -> connection.client.createClientSecret(SAFETY_IDENTIFIER, "request-connection"))
                 .isInstanceOfSatisfying(OpenAIRealtimeException.class, exception -> {
                     assertThat(exception.kind()).isEqualTo(OpenAIRealtimeException.Kind.UNAVAILABLE);
                     assertThat(exception.stage()).isEqualTo("transport_connection");
@@ -99,7 +100,7 @@ class OpenAIRealtimeClientTest {
         var invalid = fixture("test-key", "gpt-realtime-2.1-mini", "marin", 600);
         invalid.server.expect(requestTo(ENDPOINT))
                 .andRespond(withSuccess("{\"value\":\"\",\"expires_at\":1,\"session\":{}}", MediaType.APPLICATION_JSON));
-        assertThatThrownBy(() -> invalid.client.createClientSecret("safe-id", "request-invalid"))
+        assertThatThrownBy(() -> invalid.client.createClientSecret(SAFETY_IDENTIFIER, "request-invalid"))
                 .isInstanceOfSatisfying(OpenAIRealtimeException.class, exception -> {
                     assertThat(exception.kind()).isEqualTo(OpenAIRealtimeException.Kind.INVALID_RESPONSE);
                     assertThat(exception.requestId()).isEqualTo("request-invalid");
@@ -111,12 +112,27 @@ class OpenAIRealtimeClientTest {
     void classifiesRequestSerializationFailureAndPreservesItsCause() {
         var fixture = fixture("test-key", null, "marin", 600);
 
-        assertThatThrownBy(() -> fixture.client.createClientSecret("safe-id", "request-serialization"))
+        assertThatThrownBy(() -> fixture.client.createClientSecret(SAFETY_IDENTIFIER, "request-serialization"))
                 .isInstanceOfSatisfying(OpenAIRealtimeException.class, exception -> {
                     assertThat(exception.stage()).isEqualTo("request_serialization_or_execution");
                     assertThat(exception.requestId()).isEqualTo("request-serialization");
                     assertThat(exception.getCause()).isInstanceOf(NullPointerException.class);
                 });
+    }
+
+    @Test
+    void rejectsInvalidSafetyIdentifiersBeforeSendingTheRequest() {
+        var fixture = fixture("test-key", "gpt-realtime-2.1-mini", "marin", 600);
+
+        assertThatThrownBy(() -> fixture.client.createClientSecret(null, "request-null-id"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> fixture.client.createClientSecret("", "request-empty-id"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> fixture.client.createClientSecret("b".repeat(65), "request-long-id"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> fixture.client.createClientSecret("not-a-hex-hash", "request-unhashed-id"))
+                .isInstanceOf(IllegalArgumentException.class);
+        fixture.server.verify();
     }
 
     @Test
@@ -131,7 +147,7 @@ class OpenAIRealtimeClientTest {
         appender.start();
         logger.addAppender(appender);
         try {
-            assertThatThrownBy(() -> fixture.client.createClientSecret("safe-id", "request-log-test"))
+            assertThatThrownBy(() -> fixture.client.createClientSecret(SAFETY_IDENTIFIER, "request-log-test"))
                     .isInstanceOf(OpenAIRealtimeException.class);
         } finally {
             logger.detachAppender(appender);
@@ -147,6 +163,7 @@ class OpenAIRealtimeClientTest {
                         "exceptionType=org.springframework.web.client.HttpClientErrorException$Unauthorized",
                         "rootCauseType=org.springframework.web.client.HttpClientErrorException$Unauthorized");
         assertThat(exceptionTrace).doesNotContain("ek_provider-secret", "test-api-secret");
+        assertThat(event.getFormattedMessage()).doesNotContain(SAFETY_IDENTIFIER);
         assertThat(event.getThrowableProxy()).isNotNull();
     }
 
@@ -155,7 +172,7 @@ class OpenAIRealtimeClientTest {
         fixture.server.expect(requestTo(ENDPOINT)).andRespond(withStatus(status)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("{\"error\":{\"code\":\"provider_error\",\"message\":\"diagnostic ek_provider-secret\"}}"));
-        assertThatThrownBy(() -> fixture.client.createClientSecret("safe-id", "request-provider"))
+        assertThatThrownBy(() -> fixture.client.createClientSecret(SAFETY_IDENTIFIER, "request-provider"))
                 .isInstanceOfSatisfying(OpenAIRealtimeException.class,
                         exception -> {
                             assertThat(exception.kind()).isEqualTo(expected);

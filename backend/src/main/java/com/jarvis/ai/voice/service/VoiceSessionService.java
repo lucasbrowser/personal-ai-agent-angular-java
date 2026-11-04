@@ -27,7 +27,7 @@ public class VoiceSessionService {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(("jarvis-realtime-user:" + userId).getBytes(StandardCharsets.UTF_8));
-            return "sha256:" + HexFormat.of().formatHex(digest);
+            return HexFormat.of().formatHex(digest);
         } catch (java.security.NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
         }

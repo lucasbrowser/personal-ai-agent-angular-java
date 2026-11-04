@@ -24,6 +24,7 @@ import org.springframework.web.client.RestClientResponseException;
 public class OpenAIRealtimeClient {
     private static final Logger log = LoggerFactory.getLogger(OpenAIRealtimeClient.class);
     private static final Pattern SECRET = Pattern.compile("(?i)(Bearer\\s+\\S+|(?:set-cookie|cookie)\\s*[:=]\\s*[^,;\\s]+|sk-[A-Za-z0-9_-]+|ek_[A-Za-z0-9_-]+|eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+)");
+    private static final Pattern SAFETY_IDENTIFIER = Pattern.compile("[0-9a-f]{64}");
     static final String INSTRUCTIONS = """
             Você é Jarvis, um assistente pessoal inteligente, educado, objetivo, natural e prestativo.
             Você conversa em português brasileiro. Responda de maneira natural, como em uma conversa entre duas pessoas.
@@ -43,6 +44,10 @@ public class OpenAIRealtimeClient {
     }
 
     public RealtimeClientSecret createClientSecret(String safetyIdentifier, String requestId) {
+        if (safetyIdentifier == null || safetyIdentifier.isEmpty() || safetyIdentifier.length() > 64
+                || !SAFETY_IDENTIFIER.matcher(safetyIdentifier).matches()) {
+            throw new IllegalArgumentException("OpenAI safety identifier must be a 64-character lowercase SHA-256 hex value");
+        }
         try {
             Map<String, Object> request = Map.of(
                     "expires_after", Map.of("anchor", "created_at", "seconds", properties.clientSecretTtlSeconds()),
