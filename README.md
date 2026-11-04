@@ -94,6 +94,53 @@ O access token é mantido somente em memória no Angular. Os refresh tokens são
 opacos e persistidos somente como SHA-256. Login, refresh e logout validam a
 origem; refresh e logout também exigem CSRF. Não há cadastro público.
 
+## Voz em tempo real (T-03)
+
+O backend cria credenciais efêmeras em `POST /api/v1/voice/sessions`, protegido
+pela autenticação JWT existente. A identidade do usuário vem exclusivamente
+do principal autenticado. A resposta usa `Cache-Control: no-store`; o limite em
+memória é de cinco credenciais por usuário por minuto por padrão. A chave
+principal da OpenAI é usada somente pelo backend.
+
+Configure estas variáveis no processo do backend (`.env.example` contém apenas
+valores ilustrativos):
+
+| Variável | Padrão | Uso |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | obrigatória | Chave usada somente pelo backend; sem ela, o backend não inicia |
+| `OPENAI_REALTIME_MODEL` | `gpt-realtime-2.1-mini` | Modelo Realtime |
+| `OPENAI_REALTIME_VOICE` | `marin` | Voz de saída |
+| `OPENAI_REALTIME_CLIENT_SECRET_TTL_SECONDS` | `600` | Validade da credencial efêmera, de 10 a 7200 segundos |
+| `OPENAI_REALTIME_CONNECT_TIMEOUT` | `3s` | Timeout de conexão com o provedor |
+| `OPENAI_REALTIME_RESPONSE_TIMEOUT` | `10s` | Timeout da resposta do provedor |
+| `JARVIS_VOICE_SESSIONS_PER_MINUTE` | `5` | Limite por usuário, de 1 a 60 |
+
+Copie `.env.example` para `.env`, configure `OPENAI_API_KEY` e carregue as
+variáveis no processo do backend conforme as instruções PowerShell acima. Nunca
+versione uma chave real nem a inclua no ambiente do frontend.
+
+Depois de iniciar backend e Angular, faça login e selecione **Iniciar conversa**.
+O navegador solicitará acesso ao microfone (use `localhost` ou HTTPS), receberá
+uma credencial efêmera do Jarvis e conectará diretamente ao endpoint GA
+`POST https://api.openai.com/v1/realtime/calls` com essa credencial temporária.
+O `server_vad` detecta a fala e interrompe automaticamente uma resposta quando
+o usuário começa a falar. **Encerrar conversa** para as tracks do microfone,
+fecha o DataChannel e a conexão peer, remove listeners e libera o elemento de
+áudio remoto. As transcrições aparecem quando o servidor Realtime as envia; as
+conversas não são persistidas.
+
+Negação de permissão, credencial expirada, falhas de conexão e indisponibilidade
+ou limite do provedor aparecem na interface. Inicie outra sessão para tentar
+novamente. O limite local reduz pedidos repetidos de credenciais; não é um
+orçamento financeiro e não substitui os alertas de consumo do provedor. O custo
+Realtime depende do uso de áudio e texto. Consulte os [preços atuais da
+OpenAI](https://developers.openai.com/api/docs/pricing) e o [guia de custos
+Realtime](https://developers.openai.com/api/docs/guides/realtime#cost).
+
+A implementação segue a [Realtime API GA](https://developers.openai.com/api/docs/guides/realtime),
+o [guia WebRTC](https://developers.openai.com/api/docs/guides/voice-webrtc) e a
+[referência de client secrets](https://developers.openai.com/api/reference/resources/realtime/subresources/client_secrets/methods/create).
+
 ## 4. Encerrar infraestrutura
 
 Na raiz:

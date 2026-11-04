@@ -1,0 +1,30 @@
+:host { display: block; width: min(100%, 760px); margin: 0 auto; }
+.voice-panel { border: 1px solid rgba(129, 171, 219, .18); border-radius: 24px; padding: clamp(22px, 5vw, 40px); background: linear-gradient(145deg, rgba(17, 31, 53, .94), rgba(9, 17, 30, .96)); box-shadow: 0 28px 80px rgba(0, 0, 0, .28), inset 0 1px rgba(255, 255, 255, .035); color: #e8f2ff; }
+.voice-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.eyebrow { color: #83caff; font-size: 10px; font-weight: 700; letter-spacing: .2em; margin: 0 0 10px; }
+h2 { margin: 0; font-size: clamp(24px, 4vw, 32px); letter-spacing: -.04em; }
+.description { color: #91a4bc; margin: 8px 0 0; font-size: 14px; }
+.state-pill { border: 1px solid #344963; border-radius: 999px; color: #a9c3df; padding: 7px 10px; font: 10px ui-monospace, monospace; white-space: nowrap; }
+.state-pill[data-state="LISTENING"] { color: #7ee7c1; border-color: rgba(126, 231, 193, .4); }
+.state-pill[data-state="SPEAKING"] { color: #87d2ff; border-color: rgba(135, 210, 255, .45); }
+.state-pill[data-state="ERROR"] { color: #ff9f9f; border-color: rgba(255, 159, 159, .4); }
+.voice-activity { width: 156px; height: 156px; margin: 30px auto 12px; display: grid; place-items: center; position: relative; }
+.core { z-index: 1; width: 78px; height: 78px; display: grid; place-items: center; border-radius: 50%; color: #c6ebff; font: 300 34px Georgia, serif; background: radial-gradient(circle at 35% 30%, #1a4265, #0b1b30 72%); border: 1px solid #3975a0; box-shadow: 0 0 38px rgba(53, 171, 255, .2), inset 0 0 20px rgba(71, 180, 255, .1); }
+.ring { position: absolute; border: 1px solid rgba(105, 180, 231, .18); border-radius: 50%; inset: 11px; }
+.ring-two { inset: 0; border-color: rgba(105, 180, 231, .11); }
+.voice-activity[data-state="LISTENING"] .ring-one, .voice-activity[data-state="SPEAKING"] .ring-one { animation: pulse 1.7s ease-out infinite; }
+.voice-activity[data-state="SPEAKING"] .ring-two { animation: pulse 1.7s ease-out .5s infinite; }
+@keyframes pulse { 0% { transform: scale(.88); opacity: .2; } 50% { opacity: .9; } 100% { transform: scale(1.08); opacity: .08; } }
+.status { min-height: 22px; text-align: center; color: #a8b9cd; font-size: 14px; }
+.error-message { color: #ffabab; text-align: center; font-size: 13px; }
+.controls { display: flex; justify-content: center; margin-top: 22px; }
+button { border-radius: 999px; padding: 12px 22px; font-weight: 650; cursor: pointer; transition: transform .15s ease, border-color .15s ease, background .15s ease; }
+button:hover:not(:disabled) { transform: translateY(-1px); }
+button:focus-visible { outline: 2px solid #90d9ff; outline-offset: 3px; }
+button:disabled { opacity: .6; cursor: wait; }
+.start-button { color: #06121f; border: 0; background: linear-gradient(110deg, #8edcff, #74c8ff); box-shadow: 0 8px 28px rgba(91, 188, 255, .2); }
+.stop-button { color: #f0f6ff; border: 1px solid #526982; background: #152338; }
+.transcript { max-height: 230px; overflow: auto; margin-top: 32px; padding-top: 18px; border-top: 1px solid rgba(129, 171, 219, .15); }
+.transcript h3 { margin: 0 0 12px; color: #90cfff; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+.transcript p { color: #c4d2e2; font-size: 14px; line-height: 1.6; margin: 8px 0; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .ring { animation: none !important; } button { transition: none; } }

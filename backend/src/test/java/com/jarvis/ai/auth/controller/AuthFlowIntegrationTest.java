@@ -19,6 +19,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import com.jarvis.ai.auth.bootstrap.AdminUserInitializer;
 import com.jarvis.ai.auth.repository.UserRepository;
+import com.jarvis.ai.voice.client.OpenAIRealtimeClient;
+import com.jarvis.ai.voice.client.RealtimeClientSecret;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
@@ -34,9 +36,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -56,6 +62,7 @@ class AuthFlowIntegrationTest {
         registry.add("jarvis.admin.email", () -> ADMIN_EMAIL);
         registry.add("jarvis.admin.password", () -> ADMIN_PASSWORD);
         registry.add("jarvis.frontend-origin", () -> ORIGIN);
+        registry.add("jarvis.openai.realtime.api-key", () -> "test-openai-api-key-not-real");
     }
 
     @Value("${local.server.port}") int port;
@@ -65,6 +72,7 @@ class AuthFlowIntegrationTest {
     @org.springframework.beans.factory.annotation.Autowired JdbcTemplate jdbc;
     @org.springframework.beans.factory.annotation.Autowired AdminUserInitializer adminInitializer;
     @org.springframework.beans.factory.annotation.Autowired UserRepository users;
+    @MockitoBean OpenAIRealtimeClient realtimeClient;
 
     @Test
     void logsInRefreshesRotatesAndLogsOut() throws Exception {
@@ -193,6 +201,45 @@ class AuthFlowIntegrationTest {
         }
     }
 
+    @Test
+    void voiceSessionRequiresAuthenticationAndUsesAuthenticatedSubjectWithoutCachingSecret() throws Exception {
+        UUID authenticatedUser = users.findByEmail(ADMIN_EMAIL).orElseThrow().id();
+        given(realtimeClient.createClientSecret(anyString())).willReturn(
+                new RealtimeClientSecret("ek_ephemeral-only", 1_800_000_000L, "sess_voice", "gpt-realtime-2.1-mini"));
+
+        var unauthorized = send("/api/v1/voice/sessions", "POST", Map.of(), new HttpHeaders());
+        assertThat(unauthorized.statusCode()).isEqualTo(401);
+
+        UUID forgedUser = UUID.randomUUID();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(jwtForSubject(authenticatedUser));
+        var response = send("/api/v1/voice/sessions", "POST", Map.of("userId", forgedUser), headers);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
+        assertThat(response.body()).contains("ek_ephemeral-only", "sess_voice", "gpt-realtime-2.1-mini")
+                .doesNotContain("test-openai-api-key-not-real");
+        String expectedSafetyId = "sha256:" + sha256("jarvis-realtime-user:" + authenticatedUser);
+        verify(realtimeClient).createClientSecret(expectedSafetyId);
+    }
+
+    @Test
+    void voiceSessionCreationIsRateLimitedPerAuthenticatedUser() throws Exception {
+        UUID userId = UUID.randomUUID();
+        given(realtimeClient.createClientSecret(anyString())).willReturn(
+                new RealtimeClientSecret("ek_ephemeral-only", 1_800_000_000L, "sess_voice", "gpt-realtime-2.1-mini"));
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(jwtForSubject(userId));
+
+        for (int call = 0; call < 5; call++) {
+            assertThat(send("/api/v1/voice/sessions", "POST", Map.of(), headers).statusCode()).isEqualTo(200);
+        }
+        var limited = send("/api/v1/voice/sessions", "POST", Map.of(), headers);
+
+        assertThat(limited.statusCode()).isEqualTo(429);
+        assertThat(limited.headers().firstValue("Retry-After").orElse("")).isEqualTo("60");
+    }
+
     private HttpHeaders csrfHeaders(String csrf, String csrfCookie, String refresh) {
         HttpHeaders headers = new HttpHeaders(); headers.setOrigin(ORIGIN); headers.set("X-XSRF-TOKEN", csrf);
         headers.set(HttpHeaders.COOKIE, "XSRF-TOKEN=" + csrfCookie + "; jarvis_refresh=" + refresh);
@@ -218,10 +265,16 @@ class AuthFlowIntegrationTest {
         assertThat(send("/api/v1/auth/me", "GET", null, headers).statusCode()).isEqualTo(401);
     }
     private String jwt(String issuer, Instant expiresAt, boolean includeProfile) {
+        return jwt(issuer, expiresAt, includeProfile, UUID.randomUUID().toString());
+    }
+    private String jwtForSubject(UUID subject) {
+        return jwt("jarvis", Instant.now().plusSeconds(300), true, subject.toString());
+    }
+    private String jwt(String issuer, Instant expiresAt, boolean includeProfile, String subject) {
         Instant now = Instant.now();
         Instant issuedAt = expiresAt.isBefore(now) ? expiresAt.minusSeconds(300) : now;
         var claims = JwtClaimsSet.builder().issuer(issuer).issuedAt(issuedAt).expiresAt(expiresAt)
-                .subject(UUID.randomUUID().toString()).claim("roles", List.of("ADMIN"));
+                .subject(subject).claim("roles", List.of("ADMIN"));
         if (includeProfile) claims.claim("email", ADMIN_EMAIL).claim("name", "Test Admin");
         return jwtEncoder.encode(JwtEncoderParameters.from(org.springframework.security.oauth2.jwt.JwsHeader.with(MacAlgorithm.HS256).build(), claims.build())).getTokenValue();
     }

@@ -16,6 +16,10 @@ server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
 
+logging:
+  level:
+    org.springframework.web: WARN
+
 management:
   endpoints:
     web:
@@ -41,3 +45,13 @@ jarvis:
   frontend-origin: ${JARVIS_FRONTEND_ORIGIN:http://localhost:4200}
   auth:
     secure-cookie: ${JARVIS_SECURE_COOKIE:false}
+  openai:
+    realtime:
+      api-key: ${OPENAI_API_KEY:}
+      model: ${OPENAI_REALTIME_MODEL:gpt-realtime-2.1-mini}
+      voice: ${OPENAI_REALTIME_VOICE:marin}
+      client-secret-ttl-seconds: ${OPENAI_REALTIME_CLIENT_SECRET_TTL_SECONDS:600}
+      connect-timeout: ${OPENAI_REALTIME_CONNECT_TIMEOUT:3s}
+      response-timeout: ${OPENAI_REALTIME_RESPONSE_TIMEOUT:10s}
+  voice:
+    sessions-per-minute: ${JARVIS_VOICE_SESSIONS_PER_MINUTE:5}

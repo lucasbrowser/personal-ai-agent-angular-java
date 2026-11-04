@@ -1,0 +1,44 @@
+<section class="voice-panel" aria-labelledby="voice-title">
+  <div class="voice-heading">
+    <div>
+      <p class="eyebrow">ASSISTENTE DE VOZ</p>
+      <h2 id="voice-title">Converse com Jarvis</h2>
+      <p class="description">Fale naturalmente. Jarvis responderá em português.</p>
+    </div>
+    <span class="state-pill" [attr.data-state]="state()">{{ state() }}</span>
+  </div>
+
+  <div class="voice-activity" [attr.data-state]="state()" aria-hidden="true">
+    <span class="ring ring-one"></span><span class="ring ring-two"></span><span class="core">J</span>
+  </div>
+
+  <p class="status" aria-live="polite">
+    @switch (state()) {
+      @case ('IDLE') { Pronto para iniciar uma conversa. }
+      @case ('REQUESTING_MICROPHONE') { Aguardando permissão para usar o microfone… }
+      @case ('CONNECTING') { Conectando ao Jarvis… }
+      @case ('LISTENING') { Estou ouvindo. Pode falar. }
+      @case ('THINKING') { Estou preparando uma resposta… }
+      @case ('SPEAKING') { Jarvis está falando. Interrompa quando quiser. }
+      @case ('DISCONNECTING') { Encerrando a conversa… }
+      @case ('ERROR') { A conversa foi encerrada. }
+    }
+  </p>
+
+  @if (error()) { <p class="error-message" role="alert">{{ error() }}</p> }
+
+  <div class="controls">
+    @if (state() === 'IDLE' || state() === 'ERROR') {
+      <button class="start-button" type="button" (click)="start()">Iniciar conversa</button>
+    } @else {
+      <button class="stop-button" type="button" (click)="stop()" [disabled]="state() === 'DISCONNECTING'">Encerrar conversa</button>
+    }
+  </div>
+
+  @if (transcript().length) {
+    <div class="transcript" aria-label="Transcrição da conversa" aria-live="polite">
+      <h3>Transcrição</h3>
+      @for (line of transcript(); track $index) { <p>{{ line }}</p> }
+    </div>
+  }
+</section>
