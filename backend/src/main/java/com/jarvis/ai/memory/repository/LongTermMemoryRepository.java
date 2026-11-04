@@ -46,6 +46,32 @@ public class LongTermMemoryRepository {
                 status == null ? null : status.name(), status == null ? null : status.name());
     }
 
+    public List<LongTermMemory> findPageByUserId(
+            UUID userId, String category, MemoryStatus status, int limit, long offset) {
+        return jdbc.query("SELECT " + COLUMNS + " FROM jarvis.long_term_memories WHERE user_id=? "
+                        + "AND (CAST(? AS VARCHAR) IS NULL OR category=?) "
+                        + "AND (CAST(? AS VARCHAR) IS NULL OR status=?) "
+                        + "ORDER BY updated_at DESC, id LIMIT ? OFFSET ?",
+                (rs, row) -> map(rs), userId, category, category,
+                status == null ? null : status.name(), status == null ? null : status.name(), limit, offset);
+    }
+
+    public long countByUserId(UUID userId, String category, MemoryStatus status) {
+        Long count = jdbc.queryForObject("SELECT COUNT(*) FROM jarvis.long_term_memories WHERE user_id=? "
+                        + "AND (CAST(? AS VARCHAR) IS NULL OR category=?) "
+                        + "AND (CAST(? AS VARCHAR) IS NULL OR status=?)",
+                Long.class, userId, category, category,
+                status == null ? null : status.name(), status == null ? null : status.name());
+        return count == null ? 0 : count;
+    }
+
+    public boolean updateOwnedFields(
+            UUID id, UUID userId, String category, String content, MemoryStatus status, java.time.Instant updatedAt) {
+        return jdbc.update("UPDATE jarvis.long_term_memories SET category=?,content=?,status=?,updated_at=? "
+                        + "WHERE id=? AND user_id=?",
+                category, content, status.name(), Timestamp.from(updatedAt), id, userId) == 1;
+    }
+
     public boolean update(LongTermMemory memory) {
         return jdbc.update("UPDATE jarvis.long_term_memories SET category=?,content=?,status=?,confidence=?,"
                         + "source_type=?,source_conversation_id=?,updated_at=?,last_used_at=? WHERE id=? AND user_id=?",
