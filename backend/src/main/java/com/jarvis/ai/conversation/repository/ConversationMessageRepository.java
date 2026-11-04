@@ -5,6 +5,7 @@ import com.jarvis.ai.conversation.domain.MessageRole;
 import com.jarvis.ai.conversation.domain.MessageSource;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -46,5 +47,36 @@ public class ConversationMessageRepository {
                         rs.getString("content"), MessageSource.valueOf(rs.getString("source")),
                         rs.getString("external_event_id"), rs.getTimestamp("created_at").toInstant()),
                 conversationId, userId);
+    }
+
+    public List<ConversationMessage> findPageByConversationAndUserId(
+            UUID conversationId, UUID userId, int limit, long offset) {
+        return jdbc.query("SELECT " + COLUMNS + " FROM jarvis.conversation_messages "
+                        + "WHERE conversation_id=? AND user_id=? ORDER BY created_at, id LIMIT ? OFFSET ?",
+                (rs, row) -> new ConversationMessage(
+                        rs.getObject("id", UUID.class), rs.getObject("conversation_id", UUID.class),
+                        rs.getObject("user_id", UUID.class), MessageRole.valueOf(rs.getString("role")),
+                        rs.getString("content"), MessageSource.valueOf(rs.getString("source")),
+                        rs.getString("external_event_id"), rs.getTimestamp("created_at").toInstant()),
+                conversationId, userId, limit, offset);
+    }
+
+    public long countByConversationAndUserId(UUID conversationId, UUID userId) {
+        Long count = jdbc.queryForObject("SELECT COUNT(*) FROM jarvis.conversation_messages "
+                + "WHERE conversation_id=? AND user_id=?", Long.class, conversationId, userId);
+        return count == null ? 0 : count;
+    }
+
+    public Optional<ConversationMessage> findByConversationSourceAndExternalEventId(
+            UUID conversationId, UUID userId, MessageSource source, String externalEventId) {
+        if (externalEventId == null) return Optional.empty();
+        return jdbc.query("SELECT " + COLUMNS + " FROM jarvis.conversation_messages "
+                        + "WHERE conversation_id=? AND user_id=? AND source=? AND external_event_id=?",
+                (rs, row) -> new ConversationMessage(
+                        rs.getObject("id", UUID.class), rs.getObject("conversation_id", UUID.class),
+                        rs.getObject("user_id", UUID.class), MessageRole.valueOf(rs.getString("role")),
+                        rs.getString("content"), MessageSource.valueOf(rs.getString("source")),
+                        rs.getString("external_event_id"), rs.getTimestamp("created_at").toInstant()),
+                conversationId, userId, source.name(), externalEventId).stream().findFirst();
     }
 }

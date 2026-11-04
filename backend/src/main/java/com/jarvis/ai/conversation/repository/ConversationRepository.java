@@ -44,6 +44,20 @@ public class ConversationRepository {
                         instant(rs.getTimestamp("last_message_at"))), userId);
     }
 
+    public List<Conversation> findPageByUserId(UUID userId, int limit, long offset) {
+        return jdbc.query("SELECT " + COLUMNS + " FROM jarvis.conversations WHERE user_id=? "
+                        + "ORDER BY updated_at DESC, id LIMIT ? OFFSET ?", (rs, row) -> new Conversation(
+                        rs.getObject("id", UUID.class), rs.getObject("user_id", UUID.class),
+                        rs.getString("title"), ConversationStatus.valueOf(rs.getString("status")),
+                        rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant(),
+                        instant(rs.getTimestamp("last_message_at"))), userId, limit, offset);
+    }
+
+    public long countByUserId(UUID userId) {
+        Long count = jdbc.queryForObject("SELECT COUNT(*) FROM jarvis.conversations WHERE user_id=?", Long.class, userId);
+        return count == null ? 0 : count;
+    }
+
     public boolean deleteByIdAndUserId(UUID id, UUID userId) {
         return jdbc.update("DELETE FROM jarvis.conversations WHERE id=? AND user_id=?", id, userId) == 1;
     }
