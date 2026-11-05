@@ -16,7 +16,8 @@ describe('VoiceEventsService', () => {
     service.handleMessage(JSON.stringify({ event_id: 'e1', type: 'session.created' }));
     service.handleMessage(JSON.stringify({ event_id: 'e2', type: 'input_audio_buffer.speech_stopped', item_id: 'u1', audio_end_ms: 900 }));
     service.handleMessage(JSON.stringify({ event_id: 'e3', type: 'conversation.item.input_audio_transcription.completed', item_id: 'u1', transcript: 'Oi Jarvis' }));
-    service.handleMessage(JSON.stringify({ event_id: 'e4', type: 'conversation.item.added', item: { id: 'ctx_123', role: 'system' } }));
+    service.handleMessage(JSON.stringify({ event_id: 'e4', type: 'conversation.item.added', previous_item_id: null, item: { id: 'ctx_123', type: 'message', role: 'system' } }));
+    service.handleMessage(JSON.stringify({ event_id: 'e4-retrieve', type: 'conversation.item.retrieved', item: { id: 'ctx_123', type: 'message', role: 'system' } }));
     service.handleMessage(JSON.stringify({ event_id: 'e5', type: 'response.created', response: { id: 'r1' } }));
     service.handleMessage(JSON.stringify({ event_id: 'e6', type: 'response.output_audio.delta', delta: 'audio' }));
     service.handleMessage(JSON.stringify({ event_id: 'e7', type: 'response.output_audio_transcript.delta', item_id: 'a1', delta: 'OlÃ¡!' }));
@@ -28,7 +29,8 @@ describe('VoiceEventsService', () => {
       { kind: 'state', state: 'THINKING' },
       { kind: 'user-turn-committed', itemId: 'u1', audioEndMs: 900 },
       { kind: 'user-turn-final', eventId: 'e3', itemId: 'u1', text: 'Oi Jarvis' },
-      { kind: 'context-item-added', itemId: 'ctx_123' },
+      { kind: 'context-item-added', itemId: 'ctx_123', previousItemId: null },
+      { kind: 'context-item-retrieved', itemId: 'ctx_123' },
       { kind: 'state', state: 'THINKING' },
       { kind: 'response-started', responseId: 'r1' },
       { kind: 'state', state: 'SPEAKING' },

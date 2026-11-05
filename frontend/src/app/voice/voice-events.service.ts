@@ -37,10 +37,22 @@ export class VoiceEventsService {
         case 'conversation.item.done': {
           const item = event['item'] as Record<string, unknown> | undefined;
           const itemId = typeof item?.['id'] === 'string' ? item['id'] : undefined;
-          if (itemId && (item?.['role'] === 'system' || itemId.startsWith('ctx_'))) {
-            this.subject.next({ kind: 'context-item-added', itemId });
+          if (itemId?.startsWith('ctx_') && item?.['type'] === 'message'
+              && (item?.['role'] === 'user' || item?.['role'] === 'system')) {
+            const previous = event['previous_item_id'];
+            this.subject.next({ kind: 'context-item-added', itemId,
+              previousItemId: typeof previous === 'string' ? previous : previous == null ? null : '__invalid__' });
           } else if (itemId && item?.['role'] === 'user') {
             this.emitCommit(itemId);
+          }
+          break;
+        }
+        case 'conversation.item.retrieved': {
+          const item = event['item'] as Record<string, unknown> | undefined;
+          const itemId = typeof item?.['id'] === 'string' ? item['id'] : undefined;
+          if (itemId?.startsWith('ctx_') && item?.['type'] === 'message'
+              && (item?.['role'] === 'user' || item?.['role'] === 'system')) {
+            this.subject.next({ kind: 'context-item-retrieved', itemId });
           }
           break;
         }

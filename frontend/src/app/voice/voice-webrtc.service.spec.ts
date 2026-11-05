@@ -51,7 +51,7 @@ describe('VoiceWebRTCService', () => {
     events = TestBed.inject(VoiceEventsService);
   });
 
-  afterEach(() => service.stop());
+  afterEach(() => { service.stop(); vi.useRealTimers(); });
 
   it('requests the microphone before obtaining a session and establishes WebRTC with the ephemeral key', async () => {
     const requestMicrophone = vi.fn();
@@ -113,22 +113,191 @@ describe('VoiceWebRTCService', () => {
     expect(conversations.prepareTurn).toHaveBeenCalledWith('conversation-1', 'What time is it?', 'user-final-event');
     expect(channel.send).not.toHaveBeenCalled();
 
-    resolvePersistence(preparedTurn());
+    const persisted = preparedTurn();
+    resolvePersistence({ ...persisted, recentMessages: [
+      { id: 'old-user', role: 'USER', content: 'previous turn', createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'old-assistant', role: 'ASSISTANT', content: 'previous answer', createdAt: '2026-01-01T00:00:01Z' },
+      { id: 'current-message', role: 'USER', content: 'What time is it?', createdAt: '2026-01-01T00:00:02Z' },
+    ] });
     await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(1));
     const contextEvent = JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
-    expect(contextEvent).toMatchObject({ type: 'conversation.item.create', item: { type: 'message', role: 'system' } });
+    expect(contextEvent).toMatchObject({ type: 'conversation.item.create', previous_item_id: 'root', item: { type: 'message', role: 'user' } });
     expect(contextEvent.item.content[0].text).toContain('previous turn');
     expect(contextEvent.item.content[0].text).not.toContain('What time is it?');
+    const contextPayload = JSON.parse(contextEvent.item.content[0].text.slice(contextEvent.item.content[0].text.indexOf('{')));
+    expect(contextPayload.historicalMessages).toEqual([
+      { role: 'USER', content: 'previous turn' },
+      { role: 'ASSISTANT', content: 'previous answer' },
+    ]);
+    expect(contextPayload.relevantMemories).toEqual([{ category: 'PREFERENCE', content: 'short answers' }]);
 
-    channel.onmessage?.({ data: JSON.stringify({ event_id: 'context-ack', type: 'conversation.item.added', item: { id: contextEvent.item.id, role: 'system' } }) } as MessageEvent);
+    channel.onmessage?.({ data: JSON.stringify({ event_id: 'context-ack', type: 'conversation.item.added', previous_item_id: null, item: { id: contextEvent.item.id, type: 'message', role: 'user' } }) } as MessageEvent);
     await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(2));
     expect(JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[1][0])).toMatchObject({ type: 'response.create' });
+    channel.onmessage?.({ data: JSON.stringify({ event_id: 'duplicate-context-ack', type: 'conversation.item.added',
+      previous_item_id: null, item: { id: contextEvent.item.id, type: 'message', role: 'system' } }) } as MessageEvent);
 
     // Duplicate completion does not write twice or request a second response.
     channel.onmessage?.({ data: JSON.stringify({ event_id: 'user-final-event', type: 'conversation.item.input_audio_transcription.completed', item_id: 'item-user-1', transcript: 'What time is it?' }) } as MessageEvent);
     expect(conversations.prepareTurn).toHaveBeenCalledTimes(1);
     expect(channel.send).toHaveBeenCalledTimes(2);
     channel.onmessage?.({ data: JSON.stringify({ event_id: 'response-end', type: 'response.done', response: { id: 'response-1', status: 'completed' } }) } as MessageEvent);
+  });
+
+  it('bootstraps context once, then only persists the next turn and requests one response', async () => {
+    conversations.prepareTurn.mockImplementation((_id: string, content: string, eventId: string) =>
+      Promise.resolve(preparedTurn(eventId, content)));
+    await service.start(() => undefined);
+    emitTurn('item-first', 'First question', 'final-first', 10);
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(1));
+    const context = JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+    channel.onmessage?.({ data: JSON.stringify({ event_id: 'ack-first', type: 'conversation.item.added',
+      previous_item_id: null, item: { id: context.item.id, type: 'message', role: 'user' } }) } as MessageEvent);
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(2));
+    channel.onmessage?.({ data: JSON.stringify({ event_id: 'response-first', type: 'response.done',
+      response: { id: 'r-first', status: 'completed' } }) } as MessageEvent);
+
+    emitTurn('item-second', 'Second question', 'final-second', 20);
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(3));
+    expect(JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[1][0]).type).toBe('response.create');
+    expect(JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[2][0]).type).toBe('response.create');
+    expect(channel.send).toHaveBeenCalledTimes(3);
+    expect(conversations.prepareTurn).toHaveBeenCalledTimes(2);
+    expect(conversations.prepareTurn).toHaveBeenNthCalledWith(2, 'conversation-1', 'Second question', 'final-second');
+  });
+
+  it('marks an empty first context initialized and does not inject later history or memories', async () => {
+    conversations.prepareTurn.mockImplementation((_id: string, content: string, eventId: string) =>
+      Promise.resolve({ ...preparedTurn(eventId, content), recentMessages: [], activeMemories: [] }));
+    await service.start(() => undefined);
+    emitTurn('item-empty-first', 'First', 'empty-first', 10);
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(1));
+    expect(JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[0][0]).type).toBe('response.create');
+    channel.onmessage?.({ data: JSON.stringify({ event_id: 'response-empty', type: 'response.done',
+      response: { id: 'r-empty', status: 'completed' } }) } as MessageEvent);
+    conversations.prepareTurn.mockImplementation((_id: string, content: string, eventId: string) =>
+      Promise.resolve(preparedTurn(eventId, content)));
+    emitTurn('item-empty-second', 'Second', 'empty-second', 20);
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(2));
+    expect(JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[1][0]).type).toBe('response.create');
+  });
+
+  it('keeps the serialized context within the server character budget while preserving retained order', async () => {
+    const prepared = preparedTurn('budget-final', 'What time is it?');
+    conversations.prepareTurn.mockResolvedValue({ ...prepared, contextBudget: {
+      ...prepared.contextBudget, maxCharacters: 500,
+    }, recentMessages: [
+      { id: 'history-1', role: 'USER', content: 'A'.repeat(120), createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'history-2', role: 'ASSISTANT', content: 'B'.repeat(120), createdAt: '2026-01-01T00:00:01Z' },
+      { id: 'history-3', role: 'USER', content: 'C'.repeat(80), createdAt: '2026-01-01T00:00:02Z' },
+      { id: 'current-message', role: 'USER', content: 'What time is it?', createdAt: '2026-01-01T00:00:03Z' },
+    ], activeMemories: [{ id: 'memory-1', category: 'PREFERENCE', content: 'D'.repeat(60), confidence: 0.9 }] });
+    await service.start(() => undefined);
+    emitTurn('item-budget', 'What time is it?', 'budget-final', 10);
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(1));
+    const create = JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+    const text = create.item.content[0].text as string;
+    expect(text.length).toBeLessThanOrEqual(500);
+    const payload = JSON.parse(text.slice(text.indexOf('{')));
+    expect(payload.historicalMessages.at(-1)).toEqual({ role: 'USER', content: 'C'.repeat(80) });
+    expect(payload.historicalMessages).not.toContainEqual({ role: 'USER', content: 'What time is it?' });
+  });
+
+  it('recovers a lost context acknowledgement by retrieving the stable item id without resending create', async () => {
+    vi.useFakeTimers();
+    conversations.prepareTurn.mockImplementation((_id: string, content: string, eventId: string) =>
+      Promise.resolve(preparedTurn(eventId, content)));
+    await service.start(() => undefined);
+    emitTurn('item-timeout', 'Hello', 'final-timeout', 10);
+    await vi.advanceTimersByTimeAsync(8_000);
+    await Promise.resolve();
+    expect(channel.send).toHaveBeenCalledTimes(2);
+    const create = JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+    const retrieve = JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[1][0]);
+    expect(create).toMatchObject({ type: 'conversation.item.create', previous_item_id: 'root', item: { role: 'user' } });
+    expect(retrieve).toMatchObject({ type: 'conversation.item.retrieve', item_id: create.item.id });
+
+    channel.onmessage?.({ data: JSON.stringify({ event_id: 'retrieved-context', type: 'conversation.item.retrieved',
+      item: { id: create.item.id, type: 'message', role: 'user' } }) } as MessageEvent);
+    vi.useRealTimers();
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(3));
+    expect(channel.send).toHaveBeenCalledTimes(3);
+    expect(JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[2][0]).type).toBe('response.create');
+  });
+
+  it('fails closed when context insertion cannot be confirmed after one retrieval attempt', async () => {
+    vi.useFakeTimers();
+    conversations.prepareTurn.mockImplementation((_id: string, content: string, eventId: string) =>
+      Promise.resolve(preparedTurn(eventId, content)));
+    const received: any[] = [];
+    events.events$.subscribe(event => received.push(event));
+    await service.start(() => undefined);
+    emitTurn('item-uncertain', 'Hello', 'final-uncertain', 10);
+    await vi.advanceTimersByTimeAsync(13_000);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(channel.send).toHaveBeenCalledTimes(2);
+    expect(JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[0][0]).type).toBe('conversation.item.create');
+    expect(JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[1][0]).type).toBe('conversation.item.retrieve');
+    expect(received.some(event => event.kind === 'error' && event.message.includes('nenhuma resposta foi solicitada'))).toBe(true);
+
+    // Even a later turn cannot retry create within the uncertain session.
+    vi.useRealTimers();
+    channel.onmessage?.({ data: JSON.stringify({ event_id: 'response-not-sent', type: 'response.done',
+      response: { id: 'unexpected', status: 'completed' } }) } as MessageEvent);
+    emitTurn('item-after-uncertain', 'Another', 'final-after-uncertain', 20);
+    await Promise.resolve();
+    expect(channel.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects a context acknowledgement that reports a non-root predecessor', async () => {
+    conversations.prepareTurn.mockImplementation((_id: string, content: string, eventId: string) =>
+      Promise.resolve(preparedTurn(eventId, content)));
+    const received: any[] = [];
+    events.events$.subscribe(event => received.push(event));
+    await service.start(() => undefined);
+    emitTurn('item-wrong-position', 'Hello', 'wrong-position-final', 10);
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(1));
+    const create = JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+    channel.onmessage?.({ data: JSON.stringify({ event_id: 'wrong-position-ack', type: 'conversation.item.added',
+      previous_item_id: 'item-before', item: { id: create.item.id, type: 'message', role: 'system' } }) } as MessageEvent);
+    await vi.waitFor(() => expect(received.some(event => event.kind === 'error')).toBe(true));
+    expect(channel.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires a fresh bootstrap for a new session and ignores an old channel callback', async () => {
+    conversations.prepareTurn.mockImplementation((_id: string, content: string, eventId: string) =>
+      Promise.resolve(preparedTurn(eventId, content)));
+    await service.start(() => undefined);
+    emitTurn('item-old-session', 'Old', 'old-final', 10);
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(1));
+    const oldMessageHandler = channel.onmessage;
+    const firstContext = JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+    channel.onmessage?.({ data: JSON.stringify({ event_id: 'old-context-ack', type: 'conversation.item.added',
+      previous_item_id: null, item: { id: firstContext.item.id, type: 'message', role: 'user' } }) } as MessageEvent);
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(2));
+    service.stop();
+    (channel.send as ReturnType<typeof vi.fn>).mockClear();
+    await service.start(() => undefined);
+    emitTurn('item-new-session', 'New', 'new-final', 10);
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(1));
+    const newContext = JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+    expect(newContext.item.id).not.toBe(firstContext.item.id);
+    oldMessageHandler?.call(channel, { data: JSON.stringify({ event_id: 'late-old-ack', type: 'conversation.item.added',
+      previous_item_id: null, item: { id: firstContext.item.id, type: 'message', role: 'user' } }) } as MessageEvent);
+    expect(channel.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not request a response when the session disconnects during context bootstrap', async () => {
+    conversations.prepareTurn.mockImplementation((_id: string, content: string, eventId: string) =>
+      Promise.resolve(preparedTurn(eventId, content)));
+    await service.start(() => undefined);
+    emitTurn('item-disconnect', 'Hello', 'disconnect-final', 10);
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledTimes(1));
+    service.stop();
+    await Promise.resolve();
+    expect(channel.send).toHaveBeenCalledTimes(1);
+    expect(JSON.parse((channel.send as ReturnType<typeof vi.fn>).mock.calls[0][0]).type).toBe('conversation.item.create');
   });
 
   it('does not generate a response after persistence or context insertion failure', async () => {
@@ -182,5 +351,12 @@ describe('VoiceWebRTCService', () => {
       activeMemories: [{ id: 'memory-1', category: 'PREFERENCE', content: 'short answers', confidence: 0.9 }],
       contextBudget: { maxCharacters: 1000, selectedCharacters: 100, messageCharacters: 40, memoryCharacters: 60, estimation: 'chars' },
     };
+  }
+
+  function emitTurn(itemId: string, text: string, eventId: string, audioEndMs: number): void {
+    channel.onmessage?.({ data: JSON.stringify({ event_id: `${eventId}-stop`, type: 'input_audio_buffer.speech_stopped',
+      item_id: itemId, audio_end_ms: audioEndMs }) } as MessageEvent);
+    channel.onmessage?.({ data: JSON.stringify({ event_id: eventId, type: 'conversation.item.input_audio_transcription.completed',
+      item_id: itemId, transcript: text }) } as MessageEvent);
   }
 });
