@@ -69,14 +69,31 @@ public class ConversationService {
         requireOwnedConversation(conversationId, authenticatedUserId);
         if (!sourceMatchesRole(request.role(), request.source())) throw new InvalidMessageException();
 
-        String externalEventId = request.externalEventId() == null || request.externalEventId().isBlank()
-                ? null : request.externalEventId().trim();
+        return persistMessage(conversationId, authenticatedUserId, request.role(), request.content(),
+                request.source(), request.externalEventId());
+    }
+
+    /** Persists a client-submitted voice transcript with role and source fixed by the backend. */
+    @Transactional
+    public MessageWriteResult addVoiceUserTranscript(
+            UUID conversationId, UUID authenticatedUserId, String content, String externalEventId) {
+        requireOwnedConversation(conversationId, authenticatedUserId);
+        return persistMessage(conversationId, authenticatedUserId, MessageRole.USER, content,
+                MessageSource.REALTIME_USER_TRANSCRIPT, externalEventId);
+    }
+
+    private MessageWriteResult persistMessage(UUID conversationId, UUID authenticatedUserId,
+                                               MessageRole role, String content, MessageSource source,
+                                               String suppliedExternalEventId) {
+
+        String externalEventId = suppliedExternalEventId == null || suppliedExternalEventId.isBlank()
+                ? null : suppliedExternalEventId.trim();
         ConversationMessage message = new ConversationMessage(UUID.randomUUID(), conversationId, authenticatedUserId,
-                request.role(), request.content(), request.source(), externalEventId, Instant.now());
+                role, content, source, externalEventId, Instant.now());
         if (messages.save(message)) return new MessageWriteResult(response(message), true);
 
         ConversationMessage existing = messages.findByConversationSourceAndExternalEventId(
-                        conversationId, authenticatedUserId, request.source(), externalEventId)
+                        conversationId, authenticatedUserId, source, externalEventId)
                 .orElseThrow(() -> new IllegalStateException("Deduplicated conversation message was not found"));
         return new MessageWriteResult(response(existing), false);
     }

@@ -49,6 +49,19 @@ public class ConversationMessageRepository {
                 conversationId, userId);
     }
 
+    /** Returns only the newest messages, in chronological order for context assembly. */
+    public List<ConversationMessage> findRecentByConversationAndUserId(UUID conversationId, UUID userId, int limit) {
+        return jdbc.query("SELECT " + COLUMNS + " FROM (SELECT " + COLUMNS + " FROM jarvis.conversation_messages "
+                        + "WHERE conversation_id=? AND user_id=? ORDER BY created_at DESC, id DESC LIMIT ?) recent "
+                        + "ORDER BY created_at, id",
+                (rs, row) -> new ConversationMessage(
+                        rs.getObject("id", UUID.class), rs.getObject("conversation_id", UUID.class),
+                        rs.getObject("user_id", UUID.class), MessageRole.valueOf(rs.getString("role")),
+                        rs.getString("content"), MessageSource.valueOf(rs.getString("source")),
+                        rs.getString("external_event_id"), rs.getTimestamp("created_at").toInstant()),
+                conversationId, userId, limit);
+    }
+
     public List<ConversationMessage> findPageByConversationAndUserId(
             UUID conversationId, UUID userId, int limit, long offset) {
         return jdbc.query("SELECT " + COLUMNS + " FROM jarvis.conversation_messages "

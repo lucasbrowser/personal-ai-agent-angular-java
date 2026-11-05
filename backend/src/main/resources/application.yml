@@ -55,3 +55,8 @@ jarvis:
       response-timeout: ${OPENAI_REALTIME_RESPONSE_TIMEOUT:10s}
   voice:
     sessions-per-minute: ${JARVIS_VOICE_SESSIONS_PER_MINUTE:5}
+  conversation:
+    context:
+      max-recent-messages: ${JARVIS_CONTEXT_MAX_RECENT_MESSAGES:20}
+      max-memories: ${JARVIS_CONTEXT_MAX_MEMORIES:10}
+      max-characters: ${JARVIS_CONTEXT_MAX_CHARACTERS:12000}

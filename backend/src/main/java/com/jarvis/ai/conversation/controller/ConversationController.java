@@ -5,7 +5,10 @@ import com.jarvis.ai.conversation.dto.ConversationResponse;
 import com.jarvis.ai.conversation.dto.CreateConversationRequest;
 import com.jarvis.ai.conversation.dto.CreateMessageRequest;
 import com.jarvis.ai.conversation.dto.PageResponse;
+import com.jarvis.ai.conversation.dto.PrepareVoiceTurnRequest;
+import com.jarvis.ai.conversation.dto.VoiceTurnResponse;
 import com.jarvis.ai.conversation.service.ConversationService;
+import com.jarvis.ai.conversation.service.VoiceTurnPreparationService;
 import java.net.URI;
 import java.util.UUID;
 import jakarta.validation.Valid;
@@ -33,9 +36,11 @@ public class ConversationController {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final ConversationService conversations;
+    private final VoiceTurnPreparationService voiceTurns;
 
-    public ConversationController(ConversationService conversations) {
+    public ConversationController(ConversationService conversations, VoiceTurnPreparationService voiceTurns) {
         this.conversations = conversations;
+        this.voiceTurns = voiceTurns;
     }
 
     @PostMapping
@@ -78,6 +83,14 @@ public class ConversationController {
         ConversationService.MessageWriteResult result = conversations.addMessage(id, userId(principal), request);
         return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .body(result.message());
+    }
+
+    @PostMapping("/{id}/voice-turns")
+    public VoiceTurnResponse prepareVoiceTurn(
+            @AuthenticationPrincipal Jwt principal,
+            @PathVariable UUID id,
+            @Valid @RequestBody PrepareVoiceTurnRequest request) {
+        return voiceTurns.prepare(id, userId(principal), request);
     }
 
     @DeleteMapping("/{id}")

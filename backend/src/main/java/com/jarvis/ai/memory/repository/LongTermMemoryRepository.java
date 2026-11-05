@@ -46,6 +46,13 @@ public class LongTermMemoryRepository {
                 status == null ? null : status.name(), status == null ? null : status.name());
     }
 
+    /** Bounded deterministic candidates for conversational context; inactive memories are excluded in SQL. */
+    public List<LongTermMemory> findActiveContextCandidatesByUserId(UUID userId, int limit) {
+        return jdbc.query("SELECT " + COLUMNS + " FROM jarvis.long_term_memories WHERE user_id=? AND status=? "
+                        + "ORDER BY confidence DESC NULLS LAST, updated_at DESC, id LIMIT ?",
+                (rs, row) -> map(rs), userId, MemoryStatus.ACTIVE.name(), limit);
+    }
+
     public List<LongTermMemory> findPageByUserId(
             UUID userId, String category, MemoryStatus status, int limit, long offset) {
         return jdbc.query("SELECT " + COLUMNS + " FROM jarvis.long_term_memories WHERE user_id=? "
