@@ -21,7 +21,10 @@ export class VoiceAssistantComponent {
     inject(VoiceEventsService).events$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(event => {
       if (event.kind === 'state') this.state.set(event.state);
       else if (event.kind === 'error') this.fail(event.message);
-      else this.transcript.update(lines => [...lines, `${event.role === 'user' ? 'Você' : 'Jarvis'}: ${event.text}`].slice(-100));
+      else if (event.kind === 'turn-notice') this.error.set(event.message);
+      else if (event.kind === 'transcript') {
+        this.transcript.update(lines => [...lines, `${event.role === 'user' ? 'Você' : 'Jarvis'}: ${event.text}`].slice(-100));
+      }
     });
     this.webRtc.connectionEvents.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(event => {
       if (event === 'connected') this.state.set('LISTENING');

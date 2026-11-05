@@ -14,8 +14,10 @@ interface VoiceSessionResponse {
 export class VoiceSessionService {
   private readonly http = inject(HttpClient);
 
-  async createSession(): Promise<VoiceSession> {
-    const session = await firstValueFrom(this.http.post<VoiceSessionResponse | null>('/api/v1/voice/sessions', {}));
+  async createSession(conversationId: string): Promise<VoiceSession> {
+    const session = await firstValueFrom(this.http.post<VoiceSessionResponse | null>(
+      '/api/v1/voice/sessions', { conversationId },
+    ));
     if (!session || typeof session.value !== 'string' || !session.value.startsWith('ek_') || session.value.length <= 3
       || typeof session.sessionId !== 'string' || !session.sessionId.trim()
       || typeof session.model !== 'string' || !session.model.trim() || typeof session.expiresAt !== 'number'

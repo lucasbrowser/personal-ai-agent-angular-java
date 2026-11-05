@@ -46,7 +46,7 @@ describe('VoiceAssistantComponent', () => {
 
   it('shows transcripts, allows ending the conversation, and releases the connection', async () => {
     await component.start();
-    events.handleMessage(JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', item_id: '1', transcript: 'Olá' }));
+    events.publishTranscript('user', 'Olá');
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Você: Olá');
 

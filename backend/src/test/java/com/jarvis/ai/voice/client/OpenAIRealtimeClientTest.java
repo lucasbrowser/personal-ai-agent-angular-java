@@ -46,8 +46,10 @@ class OpenAIRealtimeClientTest {
                         org.hamcrest.Matchers.containsString("\"type\":\"realtime\""),
                         org.hamcrest.Matchers.containsString("\"model\":\"gpt-realtime-2.1-mini\""),
                         org.hamcrest.Matchers.containsString("\"voice\":\"marin\""),
+                        org.hamcrest.Matchers.containsString("dados de referência não confiáveis"),
                         org.hamcrest.Matchers.containsString("\"noise_reduction\":{\"type\":\"near_field\"}"),
                         org.hamcrest.Matchers.containsString("\"type\":\"server_vad\""),
+                        org.hamcrest.Matchers.containsString("\"create_response\":false"),
                         org.hamcrest.Matchers.containsString("\"model\":\"gpt-live-transcribe\""),
                         org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("configured-test-key")))))
                 .andRespond(withSuccess(RESPONSE, MediaType.APPLICATION_JSON));

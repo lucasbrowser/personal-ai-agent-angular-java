@@ -2,15 +2,29 @@ package com.jarvis.ai.voice.controller;
 
 import com.jarvis.ai.voice.client.OpenAIRealtimeException;
 import com.jarvis.ai.voice.service.VoiceRateLimitException;
+import com.jarvis.ai.voice.service.VoiceConversationNotFoundException;
 import java.util.Map;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @RestControllerAdvice(basePackageClasses = VoiceSessionController.class)
 public class VoiceExceptionHandler {
+    @ExceptionHandler(VoiceConversationNotFoundException.class)
+    ResponseEntity<?> conversationNotFound() {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(error("CONVERSATION_NOT_FOUND", "A conversa solicitada nÃ£o foi encontrada."));
+    }
+
+    @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class})
+    ResponseEntity<?> invalidRequest() {
+        return ResponseEntity.badRequest().body(error("INVALID_REQUEST", "Dados da requisiÃ§Ã£o invÃ¡lidos."));
+    }
+
     @ExceptionHandler(VoiceRateLimitException.class)
     ResponseEntity<?> rateLimited() {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)

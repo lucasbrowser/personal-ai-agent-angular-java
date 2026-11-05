@@ -43,6 +43,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -204,6 +205,7 @@ class AuthFlowIntegrationTest {
     @Test
     void voiceSessionRequiresAuthenticationAndUsesAuthenticatedSubjectWithoutCachingSecret() throws Exception {
         UUID authenticatedUser = users.findByEmail(ADMIN_EMAIL).orElseThrow().id();
+        UUID conversationId = createVoiceConversation(authenticatedUser);
         given(realtimeClient.createClientSecret(anyString(), anyString())).willReturn(
                 new RealtimeClientSecret("ek_ephemeral-only", 1_800_000_000L, "sess_voice", "gpt-realtime-2.1-mini"));
 
@@ -213,7 +215,9 @@ class AuthFlowIntegrationTest {
         UUID forgedUser = UUID.randomUUID();
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(jwtForSubject(authenticatedUser));
-        var response = send("/api/v1/voice/sessions", "POST", Map.of("userId", forgedUser), headers);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        var response = send("/api/v1/voice/sessions", "POST",
+                Map.of("conversationId", conversationId, "userId", forgedUser), headers);
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.headers().firstValue("X-Request-Id").orElse("")).matches(
@@ -230,18 +234,47 @@ class AuthFlowIntegrationTest {
     @Test
     void voiceSessionCreationIsRateLimitedPerAuthenticatedUser() throws Exception {
         UUID userId = UUID.randomUUID();
+        jdbc.update("INSERT INTO jarvis.users(id,name,email,password_hash,role,enabled) "
+                        + "VALUES(?,?,?,'test-hash','USER',true)", userId, "Voice User", userId + "@example.test");
+        UUID conversationId = createVoiceConversation(userId);
         given(realtimeClient.createClientSecret(anyString(), anyString())).willReturn(
                 new RealtimeClientSecret("ek_ephemeral-only", 1_800_000_000L, "sess_voice", "gpt-realtime-2.1-mini"));
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(jwtForSubject(userId));
+        headers.setContentType(MediaType.APPLICATION_JSON);
 
         for (int call = 0; call < 5; call++) {
-            assertThat(send("/api/v1/voice/sessions", "POST", Map.of(), headers).statusCode()).isEqualTo(200);
+            assertThat(send("/api/v1/voice/sessions", "POST", Map.of("conversationId", conversationId), headers)
+                    .statusCode()).isEqualTo(200);
         }
-        var limited = send("/api/v1/voice/sessions", "POST", Map.of(), headers);
+        var limited = send("/api/v1/voice/sessions", "POST", Map.of("conversationId", conversationId), headers);
 
         assertThat(limited.statusCode()).isEqualTo(429);
         assertThat(limited.headers().firstValue("Retry-After").orElse("")).isEqualTo("60");
+    }
+
+    @Test
+    void voiceSessionRejectsMissingOrForeignConversationBeforeCallingOpenAi() throws Exception {
+        UUID authenticatedUser = users.findByEmail(ADMIN_EMAIL).orElseThrow().id();
+        UUID foreignUser = UUID.randomUUID();
+        jdbc.update("INSERT INTO jarvis.users(id,name,email,password_hash,role,enabled) "
+                        + "VALUES(?,?,?,'test-hash','USER',true)", foreignUser, "Foreign", foreignUser + "@example.test");
+        UUID foreignConversation = createVoiceConversation(foreignUser);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(jwtForSubject(authenticatedUser));
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        assertThat(send("/api/v1/voice/sessions", "POST", Map.of(), headers).statusCode()).isEqualTo(400);
+        assertThat(send("/api/v1/voice/sessions", "POST", Map.of("conversationId", foreignConversation), headers)
+                .statusCode()).isEqualTo(404);
+        verify(realtimeClient, never()).createClientSecret(anyString(), anyString());
+    }
+
+    private UUID createVoiceConversation(UUID userId) {
+        UUID conversationId = UUID.randomUUID();
+        jdbc.update("INSERT INTO jarvis.conversations (id,user_id,status,created_at,updated_at) "
+                        + "VALUES (?,?,'ACTIVE',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)", conversationId, userId);
+        return conversationId;
     }
 
     private HttpHeaders csrfHeaders(String csrf, String csrfCookie, String refresh) {
